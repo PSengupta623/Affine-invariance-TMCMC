@@ -1,5 +1,15 @@
 
 load modaldata.mat % loading the modal data
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Stage-II: Affine-invariance based Transitional Markov Chain Monte Carlo sampler
+% Date: 3/9/2022
+% By: Partha Sengupta
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Provide all the related input in the sub-programm
+% "input_parameter.m" for each example problem
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ------------ General information of the structure ---
 N          = 10;                   %  # DOFs
 sen         = [1:2];         % measured DOFs 1 3 5 7 8 10
