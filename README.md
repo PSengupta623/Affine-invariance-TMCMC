@@ -6,17 +6,17 @@ This repository presents codes for the proposed TMCMC sampler (written in MATLAB
 ## 1) Illustrative Example: A simply supported steel beam
 See: SS_steel_beam.m
 An updating parameter theta (with i=1, 2….,10) is enforced on each stiffness parameter. Each element has a variable percentage of stiffness reductions relative to the nominal stiffness value to represent damage scenarios. The stiffness reduction percentages for various elements 
-The modal data obtained from the nominal model is taken as the mean with the coefficient of variation (COV) of 0.1, 0.15 and 0.2 as Gaussian noise for the simulation of the modal responses. 
+The modal data obtained from the nominal model is taken as the mean with the coefficient of variation (COV) of 0.1, 0.15 and 0.2 as Gaussian noise for the simulation of the modal responses. Generate the data using GenerateSimuatedData1.m.
 The measurements for corresponding DOFs are gradually decreased.
 ## 2) Example A three-dimensional ten-storied building:
 See: 3D_FEA_building.jnl
 A ten-storied RC building with the modelling details along with geometrical and material properties of the slab, beam, and column elements along with the contact elements between the element interfaces are provided in Sengupta and Chakraborty (2023) (https://doi.org/10.1016/j.ymssp.2022.109586). The total number of DOFs is 39,136. 
-The proposed two-stage model updating algorithm is applied after subdividing the model into several substructures. Three conditions of substructuring are considered for the demonstration of the proposed model updating algorithm. Now, the varying stiffness reductions are considered. From the first to the fourth levels, the nominal stiffness of columns is reduced by 30 per cent and from the fifth to the tenth floors by 20 per cent. The slabs and beams from the first to the fourth levels are defined with a stiffness reduction of 30 per cent and from the fifth to the tenth floors, a reduction of 25 per cent is considered. Geberate the data using 
+The proposed two-stage model updating algorithm is applied after subdividing the model into several substructures. Three conditions of substructuring are considered for the demonstration of the proposed model updating algorithm. Now, the varying stiffness reductions are considered. From the first to the fourth levels, the nominal stiffness of columns is reduced by 30 per cent and from the fifth to the tenth floors by 20 per cent. The slabs and beams from the first to the fourth levels are defined with a stiffness reduction of 30 per cent and from the fifth to the tenth floors, a reduction of 25 per cent is considered. Generate the data using GenerateSimuatedData1.m.
 The posterior mean values and COVs of the predicted parameters for different substructure conditions under different measurement configurations are obtained at 10 per cent, 15 per cent and 20 per cent noise levels with Nm=4.
 ## 3) Example Experimental data with a spring-mass model:
 See: experimental_springmass_model.m
 The system consists of 76.2 mm diameter and 25.4 mm thick aluminium discs with holes at the centre. A steel rod is placed in the holes for smooth sliding. Steel collars on each side of the discs are used to connect the collar springs. The springs have a constant stiffness of 56.7 kN/m and a mass of 559.3 gm, except the mass at the far left which is 419.4 gm. 
-The mass-spring system is vibrated by an electrodynamic shaker. The acceleration measurements of each mass are taken. 
+The mass-spring system is vibrated by an electrodynamic shaker. The acceleration measurements of each mass are taken.
 
 For more details on the experimental set-up, readers can also refer to the work by [Lyngdoh et al. (2019)] (https://doi.org/10.1061/(ASCE)EM.1943-7889.0001668).
 # Reference(s):
