@@ -18,7 +18,7 @@ See: experimental_springmass_model.m
 The system consists of 76.2 mm diameter and 25.4 mm thick aluminium discs with holes at the centre. A steel rod is placed in the holes for smooth sliding. Steel collars on each side of the discs are used to connect the collar springs. The springs have a constant stiffness of 56.7 kN/m and a mass of 559.3 gm, except the mass at the far left which is 419.4 gm. 
 The mass-spring system is vibrated by an electrodynamic shaker. The acceleration measurements of each mass are taken. 
 
-For more details to the Alumium Frame set-up, readers can also refer to the work by [Lyngdoh et al. (2019)] (https://doi.org/10.1061/(ASCE)EM.1943-7889.0001668).
+For more details to the experimental set-up, readers can also refer to the work by [Lyngdoh et al. (2019)] (https://doi.org/10.1061/(ASCE)EM.1943-7889.0001668).
 # Reference(s):
 * P. Sengupta, S. Chakraborty, An improved iterative model reduction technique to estimate the unknown responses using limited available responses, *Mechanical Systems and Signal Processing, 182 (2023) 109586. https://doi.org/10.1016/j.ymssp.2022.109586
 * P. Sengupta, S. Chakraborty, An improved Bayesian model updating framework by enhanced iterative model reduction technique in time domain, *Journal of Sound and Vibration, 549 (2023) 117589, https://doi.org/10.1016/j.jsv.2023.117589
