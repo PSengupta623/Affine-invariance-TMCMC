@@ -74,9 +74,9 @@ alpha1 = alpha0 + M*J;
 p1 = p0 + N*M*J;
 a1 = a0 + P*M;
 
-%------------ Gibbs Sampling
-Nsim        = 11e4;     % No. of Gibbs Sampling
-burnin      = 1e4;       % Burnin
+%------------ Proposed Sampling
+Nsim        = 1e4;     % No. of Sampling steps
+burnin      = 1e2;       % Burnin
 
 % Preallocating
 storez  = zeros(M,Nsim); % phi1
