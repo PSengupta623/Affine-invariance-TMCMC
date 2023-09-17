@@ -1,0 +1,16 @@
+function [output] = loglikelihoodnatfreq(ndoe,ndof,natfreq_meas,natfreq_pred)
+
+for j = 1 : 1 : ndoe
+for j1 = 1 : 1 : ndof    
+err_natfreq(j,j1) = (natfreq_meas(j1,j) - natfreq_pred(j1,1)) ;
+end
+end
+for j = 1 : 1 : ndof 
+for j1 = 1 : 1 : ndoe 
+
+loglikelihoodnatfreq(1,j) = (log((2*3.14)^(-1.5))) + log(var(err_natfreq(:,j)) ^(-1.5)) - ((0.5)*(((err_natfreq(j1,j))-(zeroes(j1,j)))^2)* (var(err_natfreq(:,j))));
+  
+end 
+end
+
+end
