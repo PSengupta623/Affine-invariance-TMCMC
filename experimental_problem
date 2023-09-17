@@ -1,0 +1,351 @@
+clear
+load modalspringmodelshaker.mat
+%% Information for the Model
+setdata = [1 3 4];
+J         = length(setdata);                  % No. of Observation sets
+N         = 7;                   %  # DOFs
+sen          = [1 3 5 7];                 % measured DOFs
+S        = length(sen);         % total number of measured DOFs
+modem        = [1 2 3 4];             % modes to be observed for the undamaged structure
+M        = length(modem);       % # modes considered
+P        = 7;                   % No. of parameters
+Nset           = [N,S,J,M,P];
+damagecase = 0;
+%% Actual Mass and stiffness Matrix
+mass      = (419.4/1e6) * ones(1,N);                   %kg  419.4e-6
+% mass(1) = (559.3/1e6);
+truetheta = 56.7 * ones(N,1); % kN/m
+Massmat = diag(mass);
+
+% observed response
+phinoise = phinoise(:,setdata);
+phicap = zeros(S*M,J);
+phiallmode = zeros(N,7);
+for i = 1:M
+    for j = 1:J
+        phiset = phinoise(:,j); % per set of experimental data
+        for n = 1:7
+            phiallmode(:,n) = phiset((n-1)*N+1:n*N);
+        end
+        phimode = phiallmode(:,modem(i)); % per mode
+        phicap((i-1)*S+1:i*S,j) = phimode(sen); % only where sensor is placed
+    end
+end
+
+zcap   = w2noise(modem,:);
+
+% Observation Matrix that picks the components of phi corresponding to No-measured DOFs.
+Lo0     = zeros(S,N); % Matrix of size No x Nd
+for i = 1 : S
+    Lo0(i,sen(i)) = 1;
+end
+% for m = 1:M
+%     Lo((m-1)*No+1:m*No,(m-1)*P+1:m*P) = Lo0;
+% end
+Gamma   = Lo0;
+
+% Prior
+%For Stiffness
+theta0 = 100  * ones(P,1); %
+B0 = (20)^2 * eye(P);
+invB0 = B0\eye(size(B0));
+
+% for phi
+[phi0, z0] = priorformodal(theta0,modem,Massmat,Nset);
+
+%   uncertainties for sigma2z
+alpha0 = 5;
+delta0 = 5;
+sig2z = 1/gamrnd(alpha0/2,2/delta0);
+
+%   uncertainties for sigma2phi
+p0 = 5;
+q0 = 1e-3;
+sig2phi0 = 1/gamrnd(p0/2,2/q0);
+
+%   uncertainties for sigma2theta
+a0 = 5;
+b0 = 2;
+sig2theta0 = 1/gamrnd(a0/2,2/b0);
+
+% quantities calculated outside the loop
+alpha1 = alpha0 + M*J;
+p1 = p0 + N*M*J;
+a1 = a0 + P*M;
+
+%------------ TMCMC Sampling
+Nsim        = 1e4;     % No. of TMCMC Sampling steps
+burnin      = 1e2;       % Burnin
+
+% Preallocating
+storez  = zeros(M,Nsim); % phi1
+storephi  = zeros(N*M,Nsim); % phi1
+storetheta = zeros(P,Nsim);
+storesig2z = zeros(Nsim,1);
+storesig2phi = zeros(Nsim,1);
+storesig2theta = zeros(Nsim,1);
+
+% Store Value
+storetheta(:,1) = theta0(:,1); % theta
+storesig2z(1) = sig2z; % sigma1
+storesig2phi(1)  = sig2phi0; % sigma2
+storesig2theta(1) = sig2theta0;
+storephi(:,1)  = phi0; % phi1
+storez(:,1) = z0;
+
+% Initial values
+sig2phi = sig2phi0;
+sig2theta = sig2theta0;
+theta = truetheta + randi([10 100],N,1);
+z = z0;
+tic
+hwait = waitbar(0,'Simulation in Progress');
+for n = 1:Nsim-1
+    % draw phi conditional on phicap, f, sigphisqr, h, theta, sigthetasqr
+    [phi] = drawphi(phicap, z, sig2phi, theta, sig2theta, Nset, Gamma, Massmat);
+    
+    % draw f conditional on fcap, phi, sigfsqr, lambda, theta, sigthetasqr
+    [z] = drawz(zcap, phi, sig2z, theta, sig2theta, Nset, Massmat);
+    
+    % draw theta conditional on f, phi, sigthetasqr
+    [theta] = drawtheta(z, phi, sig2theta, Massmat, invB0, theta0, Nset);
+    
+    % draw sigfsqr conditional on fcap, f, lambda
+    [sig2z] = drawsig2z(zcap, z, alpha1, delta0, Nset);
+    
+    % draw sigphisqr conditional on phicap, phi, h
+    [sig2phi] = drawsig2phi(phicap, phi, Gamma, p1, q0, Nset);
+    
+    % draw sigthetasqr conditional on f, , phi, theta
+    [sig2theta] = drawsig2theta(phi,z,theta,Massmat,Nset,b0,a1);
+    
+    storetheta(:,n+1) = theta;
+    storephi(:,n+1) = phi;
+    storez(:,n+1) = z;
+    storesig2phi(n+1) = sig2phi;
+    storesig2z(n+1) = sig2z;
+    storesig2theta(n+1) = sig2theta;
+    waitbar(n/Nsim);
+end
+close(hwait)
+toc
+
+%%% Post Burn Value
+postphi = storephi(:,burnin+1:Nsim);
+postz = storez(:,burnin+1:Nsim);
+posttheta = storetheta(:,burnin+1:Nsim);
+postsig2z = storesig2z(burnin+1:Nsim);
+postsig2phi = storesig2phi(burnin+1:Nsim);
+postsig2theta = storesig2theta(burnin+1:Nsim);
+zhomo = postz;
+sig2zhomo = postsig2z;
+% save ('thetastorefull.mat','thetamodel1')
+save ('thetaspringmassmodel.mat','storetheta')
+save('sig2zhomo_springmassmodel.mat','zhomo','sig2zhomo')
+
+
+clear results
+results(:,1) = truetheta;
+if damagecase==1
+    results([1 4],1) = [d1*truetheta(1) d4*truetheta(4)];%
+end
+results(:,2) = mean(posttheta,2);
+results(:,3) = std(posttheta,0,2);
+results(:,4) = results(:,3)./results(:,2);
+results(:,5) = abs(results(:,1) - results(:,2))./results(:,1);
+disp(['  --------------------------------------------------'])
+disp([' True_theta  Estimated_theta    s.d.      c.o.v.   Error'])
+disp(['  --------------------------------------------------'])
+disp([results])
+
+clear results
+zmodel = w2r(1:M);
+results(:,1) = zmodel;
+results(:,2) = mean(postz,2);
+results(:,3) = std(postz,0,2);
+results(:,4) = results(:,3)./results(:,2);
+disp(['  --------------------------------------------------'])
+disp([' True_z   Estimated_z    s.d.      c.o.v.'])
+disp(['  --------------------------------------------------'])
+disp([results])
+
+clear results
+results(1) = mean(postsig2z);
+results(2) = std(postsig2z);
+results(:,3) = results(:,2)./results(:,1);
+disp(['  --------------------------------------------------'])
+disp(['    sig2z    s.d.     c.o.v.'])
+disp(['  --------------------------------------------------'])
+disp([results])
+
+clear results
+results(1) = mean(postsig2phi);
+results(2) = std(postsig2phi);
+results(:,3) = results(:,2)./results(:,1);
+disp(['  --------------------------------------------------'])
+disp(['    sig2phi    s.d.     c.o.v.'])
+disp(['  --------------------------------------------------'])
+disp([results])
+
+clear results
+results(1) = mean(postsig2theta);
+results(2) = std(postsig2theta);
+results(:,3) = results(:,2)./results(:,1);
+disp(['  --------------------------------------------------'])
+disp(['    sig2theta    s.d.     c.o.v.'])
+disp(['  --------------------------------------------------'])
+disp([results])
+
+
+s ='a':'z';
+figure()
+for jj = 1:3
+    subplot(1,3,jj)
+%     plot(jj,'Parent',subplot(3,3,jj),'LineWidth',2,'Color',[0 0 0]);
+    plot(storetheta(jj,:),'LineWidth',0.5,'Color',[0 0 0]); %line([0 Nsim],[truepara(jj) truepara(jj)])
+    %     subplot(Npara,2,(jj-1)*2+2); hist(thetastorage(jj,:),100)
+    %     title(['Traceplot for \theta_',num2str(jj)]);
+%     xlabel('simulations')
+    set(subplot(1,3,jj),'FontSize',8,'FontWeight','normal','LineWidth',0.5);
+    xlim([0 Nsim])
+%     title(['\theta_',num2str(jj)],'FontWeight','normal')
+    xlabel(['(',s(jj),')'])
+    set(gca,'FontWeight','normal')
+end
+print -deps partial_traceplot_spring_model1
+% 
+%---- Histogram of theta ------%
+data_set = [postz; postsig2z'; postsig2phi'; postsig2theta'];
+figure()
+
+for k = 1:(3*M+3)
+    subplot(3,5,k)
+    hist(data_set(k,:))
+     xlabel(['(',s(k),')']);
+    set(subplot(3,5,k),'FontSize',7,'FontWeight','normal','LineWidth',1)
+    h = findobj(gca,'Type','patch');
+%     set(gca,'FontWeight','bold')
+    h.FaceColor = [1 1 1];
+    h.EdgeColor = 'k';
+    h.LineWidth = 1;
+end
+print -deps partial_hist_spring_model1
+% MAC value
+% % Plot for Modeshape
+% U = zeros(S,M);
+% meanphi = mean(postphi,2);
+% for i = 1:M
+%     phip = meanphi((i-1)*N+1:i*N);
+%     U(:,i) = Gamma * phip;
+% end
+% 
+% meancap = mean(phicap,2);
+% Mac = zeros(M,1);
+% for m = 1:M
+%     phiexp = meancap((m-1)*S+1:m*S);
+%     num = (phiexp'*U(:,m))^2;
+%     deno = (((U(:,m))'*U(:,m))*(phiexp'*phiexp));
+%     Mac(m) = num/deno;
+% end
+% disp(Mac')
+
+%---- plots for modeshapes ------%
+% figure()
+% for ii=1:M
+%     phiexp = meancap((ii-1)*S+1:ii*S);
+%     subplot(1,M,ii)
+%     plot([0;U(:,ii)],([0 sen]),'-d','MarkerSize',10,...
+%     'MarkerEdgeColor','black',...
+%     'MarkerFaceColor','w')%,'LineWidth',2.,'Marker','.',...
+%         %'MarkerSize',20,'Color',[0 1 0],'markeredgecolor','k')
+%     hold on
+%     plot([0;phiexp],([0 sen]),'o','LineWidth',10,'Marker','.',...
+%         'MarkerSize',10,'Color',[0 1 0],'markeredgecolor','b')
+%     xlim([-max(abs(U(:,ii))) max(abs(U(:,ii)))])
+%     grid on
+%     xlabel(['\phi^',num2str(modem(ii))]);
+% %     title(['Mode ',num2str(modem(ii))],'FontSize',18,'FontWeight','normal')
+%     legend('estimated \phi','experimental \phi')
+%     set(gca,'FontSize',25)
+% end
+% % 
+% %---- Trace plots of theta ------%
+% figure()
+% for jj = 1:P-1
+%     subplot(3,3,jj)
+% %     plot(jj,'Parent',subplot(3,3,jj),'LineWidth',2,'Color',[0 0 0]);
+%     plot(posttheta(jj,:),'LineWidth',2,'Color',[0 0 0]); %line([0 Nsim],[truepara(jj) truepara(jj)])
+%     %     subplot(Npara,2,(jj-1)*2+2); hist(thetastorage(jj,:),100)
+%     %     title(['Traceplot for \theta_',num2str(jj)]);
+% %     xlabel('simulations')
+%     set(subplot(3,3,jj),'FontWeight','bold','LineWidth',2);
+%     ylabel([])
+%     title(['\theta_',num2str(jj),'Model-1'],'FontWeight','bold')
+%     set(gca,'FontWeight','bold')
+% end
+% print -deps epsFig
+% % 
+% %---- Histogram of theta ------%
+% figure()
+% for k = 1:P
+%     subplot(3,3,k)
+%     hist(posttheta(k,:),15)
+%     xlabel(['\theta_',num2str(k)])
+%     set(subplot(3,3,k),'CLim',[1 2],'FontSize',10,'FontWeight','bold','LineWidth',2)
+%     h = findobj(gca,'Type','patch');
+%     set(gca,'FontWeight','bold')
+%     h.FaceColor = [1 1 1];
+%     h.EdgeColor = 'k';
+%     h.LineWidth = 2;
+% end
+% print -deps epsFig
+% % %---- Histogram of frequencies, z ------%
+% % for k = 1:M
+% %     figure()
+% %     hist(postz(k,:),15)
+% %     %      hold on
+% %     %      plot(fmodel(k),[0 0],'rp','LineWidth',20)
+% %     xlabel(['z_',num2str(k)])
+% %     set(gca,'FontSize',40)
+% %     title(['Mode ',num2str(k)],'FontWeight','normal')% (frequency and mode shape)
+% % end
+% % 
+% % %---- Histogram of lambda ------%
+% % for i = 1:M
+% %     figure()
+% %     hist(postlambda(i,:),20)
+% %     xlabel(['\lambda_',num2str(i)])
+% %     set(gca,'FontSize',40)
+% %     title(['Mode ',num2str(i)],'FontWeight','normal')% (frequency and mode shape)
+% % end
+% % 
+% %---- Histogram of h ------%
+% % for i = 1:M
+% %     figure()
+% %     hist(posth(i,:),20)
+% %     xlabel(['h_',num2str(i)])
+% %     set(gca,'FontSize',40)
+% %     title(['Mode ',num2str(i)],'FontWeight','normal')
+% % end
+% % 
+% % %---- plots for sigma2z------%
+% % figure()
+% % hist(postsig2z,20)
+% % % xlabel('\sigma_{f}^{2}')
+% % set(gca,'FontSize',35)
+% % title('Histogram of \sigma^2_z','FontWeight','normal')
+% % 
+% % %---- plots for sigma2phi------%
+% % figure()
+% % hist(postsig2phi,20)
+% % % xlabel('\sigma_{\phi}^{2}')
+% % set(gca,'FontSize',35)
+% % title('Histogram of \sigma^2_\phi','FontWeight','normal')
+% % 
+% % %---- plots for sigma2theta------%
+% % figure()
+% % hist( postsig2theta,20)
+% % % xlabel('\sigma_{\theta}^{2}')
+% % set(gca,'FontSize',35)
+% % title('Histogram of \sigma^2_\theta','FontWeight','normal')
+% % 
