@@ -1,0 +1,322 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Stage-II: Affine-invariance based Transitional Markov Chain Monte Carlo sampler
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function [output] = AffineinvaranceTMCMC(varargin)
+%% Affine invariance based TMCMC sampling to obtain MDS and posterior sampling
+
+pnames = {'ks','loglikelihood','priorpdf','priorrnd','burnin',...
+          'burninprev','step','mcchain'};
+
+
+def =  {[],[],[],[],[],0,2,3}; % define default values
+      
+[ks,loglikelihood,priorpdf,prior_rnd,burnin,burninprev,step,mcchain] = ...
+       internal.stats.parseArgs(pnames, def, varargin{:});
+   
+%% Obtain Nj samples from the prior pdf 
+j      = 0;                   % Start of j stage
+thetan = prior_rnd(ks); 
+pj     = 0;                   
+Dimensions = size(thetan, 2);
+
+count = 1; % Counter
+samps(:,:,count) = thetan;
+beta_j(count) = pj;
+
+
+thetanup   = zeros(ks, Dimensions);
+step(count) = step;
+while pj < 1    
+    j = j+1;
+    
+    %% Calculate the plausibility value p(j+1):
+    for l = 1:ks
+        log_fD_T_thetan(l) = loglikelihood(thetan(l,:));
+    end
+    if any(isinf(log_fD_T_thetan))
+        error('The prior distribution is too far from the true region');
+    end
+    pj1 = calculate_pj1(log_fD_T_thetan, pj);
+    fprintf('TEMCMC: Iteration j = %2d, pj1 = %f\n', j, pj1);
+    
+    %% Compute the plausibility weight for each sample wrt f_{j+1}
+    fprintf('Computing the weights ...\n');
+    a       = (pj1-pj)*log_fD_T_thetan;
+    wj      = exp(a);
+    wj_norm = wj./sum(wj);               
+    
+    %% Compute S(j) = E[w{j}] (eq 15)
+    S(j) = mean(wj);
+    
+   log_posterior = @(t) log(priorpdf(t)) + pj1*loglikelihood(t);
+    
+        if pj1 == 1
+        burnin = burninprev;
+    end
+    
+    %% Start Nc different Markov chains
+    fprintf('Markov chains ...\n\n');
+    idx = randsample(ks, ks, true, wj_norm);
+    
+    start = zeros(ks, Dimensions);
+    for i = 1:ks
+            start(i,:) = thetan(idx(i), :);
+    end
+    
+    % Apply the Affine-invariance sampler to obtain MDS:
+    
+        
+ [samples,MDS,acceptance_rate] = EMCMCsampler(start, log_posterior, 1, priorpdf, ...
+                            'step', step,...
+                            'BurnIn', burnin,...
+                            'mcchain', mcchain); 
+        
+        samples_nominal = permute(samples, [2 1 3]);
+        
+                thetanup = samples_nominal(:,:)';
+       
+               
+    fprintf('\n');
+    acceptance(count) = acceptance_rate;
+    
+    %% Tuning algorithm
+    c_a = (acceptance_rate - ((0.21./Dimensions) + 0.23));
+    step_nominal = step.*exp(c_a);
+    
+    if step_nominal <= 1
+    step = 1.01;
+    else
+    step = step_nominal;
+    end
+    
+    count = count+1;
+    samps(:,:,count) = thetanup;
+    step(count) = step;
+    thetan = thetanup;
+    pj     = pj1;
+    beta_j(count) = pj;
+end
+
+log_fD = sum(log(S(1:j)));
+
+
+%% Description of outputs:
+
+output.samples = thetan;         % To only show samples from the final posterior
+output.allsamples = samps;       % To show all samples from the initial prior to the final posterior
+output.log_evidence = log_fD;    % To generate the logarithmic of the evidence
+output.acceptance = acceptance;  % To show the mean acceptance rates for all iterations
+output.beta = beta_j;            % To show the values of plausibility value, beta_j 
+output.step = step;              % To show the values of step-size
+output.MDS = MDS;                % To show the MDS values
+
+return; % End
+
+
+%% Calculate the plausibility value p(j+1)
+function pj1 = calculate_pj1(log_fD_T_thetan, pj)
+
+
+threshold = 1; % threshold on the COV
+
+wj = @(e) exp(abs(e)*log_fD_T_thetan); % N x 1
+fmin = @(e) std(wj(e)) - threshold*mean(wj(e)) + realmin;
+e = abs(fzero(fmin, 0)); 
+if isnan(e)
+    error('There is an error finding e');
+end
+
+pj1 = min(1, pj + e);
+
+return; % End
+
+function [models,MDS,acceptance]=AffineGoodmanandWeare(minit,MDSfuns,ks,box,varargin)
+
+% Goodman and Weare 2010 Affine invariant sampler
+
+persistent isoctave;  
+if isempty(isoctave)
+	isoctave = (exist ('OCTAVE_VERSION', 'builtin') > 0);
+end
+
+if nargin<3
+    error('GWMCMC:toofewinputs','GWMCMC requires atleast 3 inputs.')
+end
+M=size(minit,2);
+if size(minit,1)==1
+    minit=bsxfun(@plus,minit,randn(M*5,M));
+end
+
+
+p=inputParser;
+if isoctave
+    p=p.addParamValue('step',2,@isnumeric); 
+    p=p.addParamValue('mcchain',10,@isnumeric);
+    p=p.addParamValue('ProgressBar',false,@islogical);
+    p=p.addParamValue('Parallel',false,@islogical);
+    p=p.addParamValue('BurnIn',0,@isnumeric);
+    p=p.parse(varargin{:});
+else
+    p.addParameter('step',2,@isnumeric);
+    p.addParameter('mcchain',10,@isnumeric);
+    p.addParameter('ProgressBar',false,@islogical);
+    p.addParameter('Parallel',false,@islogical);
+    p.addParameter('BurnIn',0,@isnumeric);
+    p.parse(varargin{:});
+end
+p=p.Results;
+
+Nwalkers=size(minit,1);
+
+if size(minit,2)*2>size(minit,1)
+    warning('GWMCMC:minitdimensions','Check minit dimensions.\nIt is recommended that there be atleast twice as many DOFs in the ensemble as there are model dimension.')
+end
+
+if p.ProgressBar
+    progress=@textprogress;
+else
+    progress=@noaction;
+end
+
+
+
+Nkeep = ks + p.BurnIn; 
+
+models=nan(Nwalkers,M,Nkeep); 
+models(:,:,1)=minit; 
+
+if ~iscell(MDSfuns)
+    MDSfuns={MDSfuns};
+end
+
+NPfun=numel(MDSfuns);
+
+%calculate MDS state initial pos of walkers
+MDS=nan(Nwalkers,NPfun,Nkeep); 
+for wix=1:Nwalkers
+    for fix=1:NPfun
+        v=MDSfuns{fix}(minit(wix,:));
+        if islogical(v) 
+            v=-1/v;MDSfuns{fix}=@(m)-1/MDSfuns{fix}(m); 
+        end
+        MDS(wix,fix,1)=v;
+    end
+end
+
+if ~all(all(isfinite(MDS(:,:,1))))
+    error('Starting points for all walkers must have finite MDS')
+end
+
+
+reject=zeros(Nwalkers,1);
+
+
+curm = models(:,:,1); 
+curMDS = MDS(:,:,1); 
+progress(0,0,0)
+totcount=Nwalkers;
+for row = 1:Nkeep 
+    for jj=1:p.mcchain
+        %generate proposals samples
+        rix = mod((1:Nwalkers)+floor(rand*(Nwalkers-1)),Nwalkers)+1; % pick a random sample
+        
+        proposedm = zeros(Nwalkers, size(minit,2));  
+        zz = zeros(Nwalkers, 1);                     
+        for i = 1:Nwalkers
+        while true
+        zz(i) = ((p.step - 1)*rand(1,1) + 1).^2/p.step;  
+        proposedm(i,:) = curm(rix(i),:) - bsxfun(@times,(curm(rix(i),:)-curm(i,:)),zz(i)); 
+        if box(proposedm(i,:))
+        
+        break;
+        end
+        end
+        end
+        
+        logrand=log(rand(Nwalkers,NPfun+1));
+        if p.Parallel
+                       parfor wix=1:Nwalkers
+                cp=curMDS(wix,:);
+                lr=logrand(wix,:);
+                acceptfullstep=true;
+                proposedMDS=nan(1,NPfun);
+                if lr(1)<(numel(proposedm(wix,:))-1)*log(zz(wix))
+                    for fix=1:NPfun
+                        proposedMDS(fix)=MDSfuns{fix}(proposedm(wix,:)); 
+                        if lr(fix+1)>proposedMDS(fix)-cp(fix) || ~isreal(proposedMDS(fix)) || isnan( proposedMDS(fix) )
+                            acceptfullstep=false;
+                            break
+                        end
+                    end
+                else
+                    acceptfullstep=false;
+                end
+                if acceptfullstep
+                    curm(wix,:)=proposedm(wix,:); curMDS(wix,:)=proposedMDS;
+                else
+                    reject(wix)=reject(wix)+1;
+                end
+            end
+        else 
+            for wix=1:Nwalkers
+                acceptfullstep=true;
+                proposedMDS=nan(1,NPfun);
+                if logrand(wix,1)<(numel(proposedm(wix,:))-1)*log(zz(wix))
+                    for fix=1:NPfun
+                        proposedMDS(fix)=MDSfuns{fix}(proposedm(wix,:));
+                        if logrand(wix,fix+1)>proposedMDS(fix)-curMDS(wix,fix) || ~isreal(proposedMDS(fix)) || isnan(proposedMDS(fix))
+                            acceptfullstep=false;
+                            break
+                        end
+                    end
+                else
+                    acceptfullstep=false;
+                end
+                if acceptfullstep
+                    curm(wix,:)=proposedm(wix,:); curMDS(wix,:)=proposedMDS;
+                else
+                    reject(wix)=reject(wix)+1;
+                end
+            end
+
+        end
+        totcount=totcount+Nwalkers;
+        progress((row-1+jj/p.mcchain)/Nkeep,curm,sum(reject)/totcount)
+    end
+    models(:,:,row)=curm;
+    MDS(:,:,row)=curMDS;
+end
+progress(1,0,0);
+
+acceptance = 1 - (sum(reject)/totcount);
+
+if p.BurnIn>0
+    crop=p.BurnIn;
+    models(:,:,1:crop)=[]; 
+    MDS(:,:,1:crop)=[];
+end
+
+function textprogress(pct,curm,rejectpct)
+persistent lastNchar lasttime starttime
+if isempty(lastNchar)||pct==0
+    lasttime=cputime-10;starttime=cputime;lastNchar=0;
+    pct=1e-16;
+end
+if pct==1
+    fprintf('%s',repmat(char(8),1,lastNchar));lastNchar=0;
+    return
+end
+if (cputime-lasttime>0.1)
+
+    ETA=datestr((cputime-starttime)*(1-pct)/(pct*60*60*24),13);
+    progressmsg=[183-uint8((1:40)<=(pct*40)).*(183-'*') ''];
+    curmtxt=sprintf('% 9.3g\n',curm(1:min(end,20),1));
+    progressmsg=sprintf('\nGWMCMC %5.1f%% [%s] %s\n%3.0f%% rejected\n%s\n',pct*100,progressmsg,ETA,rejectpct*100,curmtxt);
+
+    fprintf('%s%s',repmat(char(8),1,lastNchar),progressmsg);
+    drawnow;lasttime=cputime;
+    lastNchar=length(progressmsg);
+end
+
+function noaction(varargin)
