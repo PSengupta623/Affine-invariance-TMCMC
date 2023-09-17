@@ -1,0 +1,14 @@
+function [output] = loglikelihoodmodeshape(ndoe,ndof,modeshape_meas,modeshape_pred)
+
+for j = 1 : 1 : ndoe
+for j1 = 1 : 1 : ndof    
+errnorm_mode_shape(j,j1) = (modeshape_meas(j1,j) - modeshape_pred(j1,1)) ;    
+end
+end
+
+for j = 1 : 1 : ndof 
+for j1 = 1 : 1 : ndoe 
+loglikelihoodmodeshape(1,j) = (log((2*3.14)^(-1.5))) + log(var(errnorm_mode_shape(:,j)) ^(-1.5)) - ((0.5)*(((errnorm_mode_shape(j1,j))-(zeroes(j1,j)))^2)* (var(errnorm_mode_shape(:,j))));
+end 
+end
+end
