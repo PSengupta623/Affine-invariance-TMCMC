@@ -1,0 +1,114 @@
+clc; close; clear all;
+example_index = 2; 
+Ns = 1000;
+
+switch example_index
+    case 1
+       
+        in_para.Ns = Ns;
+        in_para.Nd = 3;
+        in_para.lik_name = 'Lik_natfreq';
+        in_para.lik_para.mu = [0 0 0];
+        in_para.lik_para.sig = [1 0.5 0;
+               0.5 1 -0.8;
+               0 -0.8 1];
+        in_para.bounds = [-5 -5 -5 ; 5 5 5];
+       
+        ind_dim = [1 2; 2 3; 1 3]; 
+    case 2
+       
+        in_para.Ns = Ns;
+        in_para.Nd = 2;
+        in_para.lik_name = 'Lik_NatfreqModeshape';
+        in_para.lik_para = [];
+        in_para.bounds = [-10 -10 ; 10 10];
+       
+        ind_dim = [1 2]; 
+end
+
+sys_para = MODAL_Input(in_para);
+
+MODAL = MODAL_Affine(sys_para);
+
+
+
+
+f_seed = 1; 
+size_t = 20; 
+size_xy = 16; 
+size_line = 2; 
+size_mark = 10; 
+size_dot = 50; 
+load('MODAL_output.mat')
+
+t_pause = 5; 
+
+
+
+figure(f_seed)
+tmp = out_Affine.N_accept(2:end)./(out_Affine.N_accept(2:end) + out_Affine.N_reject(2:end));
+plot(2:out_Affine.gen,tmp,'-xk','LineWidth',size_line,'MarkerSize',size_mark)
+title('MODAL statistics','FontSize',size_t)
+xlabel('TMCMC Stage','FontSize',size_xy)
+ylabel('Acceptance rate','FontSize',size_xy)
+xlim([1 out_Affine.gen])
+ylim([0 1])
+
+for i = 1:size(ind_dim,1)
+    figure(f_seed+i)
+    clf
+    tmp = out_Affine.lik + out_Affine.pri;
+    scatter(out_Affine.theta(:,ind_dim(i,1)),out_Affine.theta(:,ind_dim(i,2)),...
+        size_dot*(1+0.1*out_Affine.Ns),tmp)
+    title('Terminating samples','FontSize',size_t)
+    xlabel(['Dim. ',num2str(ind_dim(i,1))],'FontSize',size_xy)
+    ylabel(['Dim. ',num2str(ind_dim(i,2))],'FontSize',size_xy)
+    
+    c = colorbar;
+    c1=get(gca,'position');
+    c2=get(c,'Position');
+    c2(3)=0.5*c2(3);
+    set(c,'Position',c2)
+    set(gca,'position',c1)
+end
+
+
+for k = 1:out_Affine.gen-1
+    load(['MODAL_gen_',num2str(k),'.mat'])
+    for i = 1:size(ind_dim,1)
+        figure(f_seed+i)
+        clf
+        tmp = runinfo.lik + runinfo.pri;
+        scatter(runinfo.theta(:,ind_dim(i,1)),runinfo.theta(:,ind_dim(i,2)),...
+            size_dot*(1+0.1*runinfo.Ns),tmp)
+        title(['TMCMC Stage ',num2str(k)],'FontSize',size_t)
+        xlabel(['theta. ',num2str(ind_dim(i,1))],'FontSize',size_xy)
+        ylabel(['theta. ',num2str(ind_dim(i,2))],'FontSize',size_xy)
+        
+        c = colorbar;
+        c1=get(gca,'position');
+        c2=get(c,'Position');
+        c2(3)=0.5*c2(3);
+        set(c,'Position',c2)
+        set(gca,'position',c1)
+    end
+    pause(t_pause)
+end
+load('MODAL_output.mat')
+for i = 1:size(ind_dim,1)
+    figure(f_seed+i)
+    clf
+    tmp = out_Affine.lik + out_Affine.pri;
+    scatter(out_Affine.theta(:,ind_dim(i,1)),out_Affine.theta(:,ind_dim(i,2)),...
+        size_dot*(1+0.1*out_Affine.Ns),tmp)
+    title('Terminating samples','FontSize',size_t)
+    xlabel(['theta. ',num2str(ind_dim(i,1))],'FontSize',size_xy)
+    ylabel(['theta. ',num2str(ind_dim(i,2))],'FontSize',size_xy)
+    
+    c = colorbar;
+    c1=get(gca,'position');
+    c2=get(c,'Position');
+    c2(3)=0.5*c2(3);
+    set(c,'Position',c2)
+    set(gca,'position',c1)
+end
