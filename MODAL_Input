@@ -1,0 +1,101 @@
+
+function [sys_para] = MODAL_Input(para)
+
+
+sys_para.N_cpu = 1; 
+sys_para.max_cLen = 1; 
+
+
+
+sys_para.N_s = para.Ns;
+
+sys_para.N_s_fin = sys_para.N_s;
+
+sys_para.max_gen = 1000; 
+
+sys_para.beta2 = 0.09;
+
+sys_para.Gen_burn = 0;
+
+sys_para.N_burn = 0;
+
+sys_para.TF_msg = true;
+sys_para.TF_save = true;
+
+
+
+
+sys_para.N_dim = para.Nd;
+
+sys_para.hard_bds = para.bounds; 
+
+
+sys_para.lik.name = para.lik_name;
+sys_para.lik.para = para.lik_para;
+
+
+
+sys_para.cv_tol = 1;
+
+
+sys_para.N_gen_maxP = 0; 
+   
+sys_para.maxP = 0.2*ones(sys_para.N_gen_maxP,1);
+   
+sys_para.N_gen_minP = 0;
+    
+sys_para.minP = 0.0001*ones(sys_para.N_gen_minP,1);
+    
+sys_para.opt_iniP = 1e-8; 
+
+tmp_tol = min(0.00001,sys_para.opt_iniP);
+if sys_para.TF_msg
+    sys_para.opt_setup = optimset('Display','iter',...
+        'TolX',tmp_tol,'TolFun',tmp_tol,'Algorithm','sqp');
+else
+    sys_para.opt_setup = optimset('Display','off',...
+        'TolX',tmp_tol,'TolFun',tmp_tol,'Algorithm','sqp');
+end
+
+
+
+for i = 1:sys_para.N_dim
+    sys_para.pri.name{i} = 'Uniform';
+    sys_para.pri.para{i} = para.bounds(:,i);
+end
+
+sys_para.pri.TF_custom = false;
+sys_para.pri.name_custom_rnd = '';
+sys_para.pri.para_custom_rnd = [];
+sys_para.pri.name_custom_pdf = '';
+sys_para.pri.para_custom_pdf = [];
+
+
+
+sys_para.TF_prop_pri = false;
+sys_para.prop_theta = [];
+sys_para.prop_val = [];
+
+
+sys_para.TF_anneal_pri = sys_para.TF_prop_pri;
+
+
+
+if sys_para.N_cpu > 1
+    max_trial = 100;
+    tmp = 1;
+    tmp_par = gcp('nocreate');
+    while (isempty(tmp_par) || (tmp_par.NumWorkers < sys_para.N_cpu))...
+            && (tmp < max_trial)
+        try
+            tmp_par = parpool('local',sys_para.N_cpu);
+        catch
+            tmp = tmp + 1;
+        end
+    end
+    if tmp == max_trial
+        fprintf('matlabpool open failed %d times\n',max_trial)
+    end
+end
+
+end
