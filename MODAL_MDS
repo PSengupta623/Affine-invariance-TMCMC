@@ -1,0 +1,199 @@
+
+function [out_MDS] = MODAL_MDS(ind_MDS,Affine,local_para,local_info)
+
+
+out_MDS = struct([]);
+if isempty(Affine) || (Affine.N_invariant == 0)
+    return
+else
+    out_MDS(Affine.N_invariant).theta = [];
+end
+
+
+if local_para.TF_msg
+    fprintf('MDS #%d: My assigned Affine is %d chains, tot len = %d\n',...
+        ind_MDS,Affine.N_invariant,sum(Affine.len));
+end
+
+if local_info.gen == 1
+   
+    tmp = PDF_Pri(Affine.theta,local_para.pri);
+   
+    for i = 1:Affine.N_invariant
+        out_MDS(i).theta = Affine.theta(i,:);
+        out_MDS(i).Ns = 1;
+        
+        [out_MDS(i).lik,out_MDS(i).out_lik{1}] = ...
+            feval(local_para.lik.name,Affine.theta(i,:),local_para.lik.para);
+        out_MDS(i).pri = tmp(i);
+        
+       
+        out_MDS(i).N_accept = 0;
+        out_MDS(i).N_reject = 0;
+    end
+else
+    
+    for i = 1:Affine.N_invariant
+        
+        thetao = Affine.theta(i,:);
+        lnfo_lik = Affine.lik(i);
+        lnfo_pri = Affine.pri(i);
+       
+        out_MDS(i).theta = thetao;
+        out_MDS(i).Ns = 0;
+        out_MDS(i).lik = lnfo_lik;
+        out_MDS(i).pri = lnfo_pri;
+        out_MDS(i).out_lik = Affine.out_lik(i); 
+       
+        out_MDS(i).N_accept = 0;
+        out_MDS(i).N_reject = 0;
+        
+       
+        if local_info.gen <= local_para.Gen_burn
+        
+        for j = 1:local_para.N_burn(...
+                min(local_info.gen,length(local_para.N_burn)))
+           
+            [TF_inBDs,thetac] = ...
+                Rnd_Prop(thetao,local_info.cov_s,local_para.hard_bds);
+            if TF_inBDs
+               
+                [lnfc_lik,outc_lik] = ...
+                    feval(local_para.lik.name,thetac,local_para.lik.para);
+                lnfc_pri = PDF_Pri(thetac,local_para.pri);
+
+               
+                if local_para.TF_anneal_pri
+                    r = exp(local_info.p(local_info.gen)*...
+                        (lnfc_lik + lnfc_pri - lnfo_lik - lnfo_pri));
+                else
+                    r = exp(local_info.p(local_info.gen)*...
+                        (lnfc_lik - lnfo_lik) + (lnfc_pri - lnfo_pri));
+                end
+                r = min(1,r);
+                state = find(mnrnd(1,[r,1-r]));
+
+              
+                if state == 1
+                   
+                    thetao = thetac;
+                    lnfo_lik = lnfc_lik;
+                    lnfo_pri = lnfc_pri;
+                    
+                    
+                    out_MDS(i).theta = thetao;
+                    out_MDS(i).Ns = 0;
+                    out_MDS(i).lik = lnfo_lik;
+                    out_MDS(i).pri = lnfo_pri;
+                    out_MDS(i).out_lik{1} = outc_lik;
+                    
+                    out_MDS(i).N_accept = out_MDS(i).N_accept + 1;
+                else
+                    out_MDS(i).N_reject = out_MDS(i).N_reject + 1;
+                end
+            else
+                out_MDS(i).N_reject = out_MDS(i).N_reject + 1;
+            end
+        end
+        
+        end
+        
+       
+        for j = 1:Affine.len(i)
+           
+            [TF_inBDs,thetac] = ...
+                Rnd_Prop(thetao,local_info.cov_s,local_para.hard_bds);
+            if TF_inBDs
+               
+                [lnfc_lik,outc_lik] = ...
+                    feval(local_para.lik.name,thetac,local_para.lik.para);
+                lnfc_pri = PDF_Pri(thetac,local_para.pri);
+
+               
+                if local_para.TF_anneal_pri
+                    r = exp(local_info.p(local_info.gen)*...
+                        (lnfc_lik + lnfc_pri - lnfo_lik - lnfo_pri));
+                else
+                    r = exp(local_info.p(local_info.gen)*...
+                        (lnfc_lik - lnfo_lik) + (lnfc_pri - lnfo_pri));
+                end
+                r = min(1,r);
+                state = find(mnrnd(1,[r,1-r]));
+
+               
+                if state == 1
+                   
+                    out_MDS(i).theta(end+1,:) = thetac;
+                    out_MDS(i).Ns(end+1) = 1;
+                    out_MDS(i).lik(end+1) = lnfc_lik;
+                    out_MDS(i).pri(end+1) = lnfc_pri;
+                    out_MDS(i).out_lik{end+1} = outc_lik;
+                    
+                    thetao = thetac;
+                    lnfo_lik = lnfc_lik;
+                    lnfo_pri = lnfc_pri;
+                    
+                    out_MDS(i).N_accept = out_MDS(i).N_accept + 1;
+                else
+                    
+                    out_MDS(i).Ns(end) = out_MDS(i).Ns(end) + 1;
+                    
+                    out_MDS(i).N_reject = out_MDS(i).N_reject + 1;
+                end
+            else
+               
+                out_MDS(i).Ns(end) = out_MDS(i).Ns(end) + 1;
+                
+                out_MDS(i).N_reject = out_MDS(i).N_reject + 1;
+            end
+        end
+        
+        
+        if out_MDS(i).Ns(1) == 0
+            out_MDS(i).theta(1,:) = [];
+            out_MDS(i).Ns(1) = [];
+            out_MDS(i).lik(1) = [];
+            out_MDS(i).pri(1) = [];
+            out_MDS(i).out_lik(1) = [];
+        end
+    end 
+end
+
+end
+
+
+
+function [ln_f] = PDF_Pri(theta,para)
+    if para.TF_custom
+        ln_f = feval(para.name_custom_pdf,theta,para.para_custom_pdf);
+    else
+        ln_f = zeros(size(theta,1),1);
+        for i = 1:size(theta,2)
+            switch length(para.para{i})
+                case 1
+                    ln_f = ln_f + ...
+                        log(pdf(para.name{i},theta(:,i),para.para{i}));
+                case 2
+                    ln_f = ln_f + log(pdf(para.name{i},theta(:,i),...
+                        para.para{i}(1),para.para{i}(2)));
+                case 3
+                    ln_f = ln_f + log(pdf(para.name{i},theta(:,i),...
+                        para.para{i}(1),para.para{i}(2),para.para{i}(3)));
+            end
+        end
+    end
+end
+
+
+
+function [TF_inBDs,thetac] = Rnd_Prop(theta,SIG,bds)
+    
+    thetac = mvnrnd(theta,SIG);
+    
+    if any(thetac < bds(1,:)) || any(thetac > bds(2,:))
+        TF_inBDs = false;
+    else
+        TF_inBDs = true;
+    end
+end
+
