@@ -1,0 +1,22 @@
+function [out,misc] = Lik_NatfreqModeshape(theta,para)
+
+x = theta;
+
+a = 1; b = 1; % modeshape parameters
+
+npar = 2; % number of unknowns
+rho = 0.9; % target correlation
+sig = eye(npar); sig(1,2) = rho; sig(2,1) = rho;
+lam = inv(sig); % target precision
+mu = zeros(1,npar); % center
+d = struct('mu',mu,'a',a,'b',b,'lam',lam);
+d.mu = mu;d.a=1;d.b=1;d.lam=lam;
+% 'modeshape' sum-of-squares
+modeshapefun = @(x) [a.*x(:,1),x(:,2)./a-b.*((a.*x(:,1)).^2+a^2),x(:,3:end)];
+modeshapeinv = @(x) [x(:,1)./a,x(:,2).*a+a.*b.*(x(:,1).^2+a^2),x(:,3:end)];
+
+out = -(modeshapeinv(x-d.mu)*d.lam*modeshapeinv(x-d.mu)')/2;
+
+misc = para;
+
+end
